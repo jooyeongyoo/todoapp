@@ -1,20 +1,24 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:google_fonts/google_fonts.dart'; // 구글 폰트 추가
+import 'package:google_fonts/google_fonts.dart'; 
 
-// 1. Task 클래스
+// 1. Task 클래스 (시간 속성 추가)
 class Task {
   String title;
   bool isDone;
   String memo;
   String category;
+  String startTime; // [신규] 시작 시간
+  String endTime;   // [신규] 종료 시간
 
   Task({
     required this.title,
     this.isDone = false,
     this.memo = "",
     this.category = "기본",
+    this.startTime = "",
+    this.endTime = "",
   });
 
   Map<String, dynamic> toJson() => {
@@ -22,6 +26,8 @@ class Task {
     'isDone': isDone,
     'memo': memo,
     'category': category,
+    'startTime': startTime,
+    'endTime': endTime,
   };
 
   factory Task.fromJson(Map<String, dynamic> json) => Task(
@@ -29,6 +35,8 @@ class Task {
     isDone: json['isDone'] ?? false,
     memo: json['memo'] ?? "",
     category: json['category'] ?? "기본",
+    startTime: json['startTime'] ?? "",
+    endTime: json['endTime'] ?? "",
   );
 }
 
@@ -43,14 +51,13 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: '스케줄 앱',
-      debugShowCheckedModeBanner: false, // 우측 상단 디버그 띠 제거
+      debugShowCheckedModeBanner: false, 
       theme: ThemeData(
-        useMaterial3: true, // [UI 업그레이드] 최신 Material 3 디자인 적용
+        useMaterial3: true, 
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6A9C89), // 부드러운 파스텔 그린 톤을 메인 색상으로 지정
+          seedColor: const Color(0xFF6A9C89),
           brightness: Brightness.light,
         ),
-        // [UI 업그레이드] 둥글고 세련된 한글 폰트 적용 (Noto Sans)
         textTheme: GoogleFonts.notoSansKrTextTheme(Theme.of(context).textTheme),
         appBarTheme: const AppBarTheme(
           centerTitle: true,
@@ -87,6 +94,7 @@ class _TaskScreenState extends State<TaskScreen> {
     _loadData();
   }
 
+  // --- 데이터 불러오기/저장하기 ---
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
     List<String>? savedCategories = prefs.getStringList('categories');
@@ -114,11 +122,20 @@ class _TaskScreenState extends State<TaskScreen> {
     await prefs.setString('tasksMap', jsonEncode(encodedMap));
   }
 
+  // --- 날짜 및 시간 유틸리티 ---
   String _getDateString(DateTime date) {
     return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
   }
 
-  // --- 기존의 기능 함수들 (변경 없음) ---
+  // [신규] TimeOfDay를 '오전/오후 00:00' 형태의 한국어 문자열로 바꿔주는 함수
+  String _formatTime(TimeOfDay time) {
+    final hour = time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod;
+    final period = time.period == DayPeriod.am ? '오전' : '오후';
+    final minute = time.minute.toString().padLeft(2, '0');
+    return '$period $hour:$minute';
+  }
+
+  // --- 기존 달력/팝업 기능들 ---
   Future<void> _selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -160,7 +177,6 @@ class _TaskScreenState extends State<TaskScreen> {
     }
   }
 
-  // (수정 팝업 로직들은 길어서 기능은 동일하게 유지하되 시각적 여백만 조금 다듬었습니다)
   void _showEditTitleDialog(Task task) {
     _titleController.text = task.title; 
     showDialog(
@@ -264,6 +280,185 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
+  void _showAddNewCategoryDialog() {
+    TextEditingController newCategoryController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('새 카테고리 추가'),
+        content: TextField(
+          controller: newCategoryController,
+          decoration: InputDecoration(
+            hintText: '카테고리 이름 입력',
+            filled: true,
+            fillColor: Colors.grey[100],
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+          FilledButton(
+            onPressed: () {
+              if (newCategoryController.text.isNotEmpty) {
+                setState(() {
+                  if (!_categories.contains(newCategoryController.text)) {
+                    _categories.add(newCategoryController.text);
+                  }
+                });
+                _saveData(); 
+                Navigator.pop(context);
+                _showCategoryFilterDialog(); 
+              }
+            },
+            child: const Text('저장'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteCategoryDialog(String categoryToDelete) {
+    String action = '이동'; 
+    List<String> availableCategories = _categories.where((c) => c != categoryToDelete).toList();
+    String targetCategory = availableCategories.first; 
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('카테고리 삭제'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("'$categoryToDelete' 카테고리를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다."),
+              const SizedBox(height: 20),
+              const Text('포함된 할 일 처리 방법', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+              const SizedBox(height: 8),
+              RadioListTile<String>(
+                title: const Text('다른 카테고리로 이동'),
+                value: '이동',
+                groupValue: action,
+                contentPadding: EdgeInsets.zero,
+                onChanged: (val) {
+                  setDialogState(() => action = val!);
+                },
+              ),
+              if (action == '이동')
+                Padding(
+                  padding: const EdgeInsets.only(left: 32.0, bottom: 8.0, right: 8.0),
+                  child: DropdownButtonFormField<String>(
+                    value: targetCategory,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    items: availableCategories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
+                    onChanged: (val) {
+                      if (val != null) setDialogState(() => targetCategory = val);
+                    },
+                  ),
+                ),
+              RadioListTile<String>(
+                title: const Text('할 일도 함께 모두 삭제', style: TextStyle(color: Colors.redAccent)),
+                value: '삭제',
+                groupValue: action,
+                contentPadding: EdgeInsets.zero,
+                onChanged: (val) {
+                  setDialogState(() => action = val!);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+              onPressed: () {
+                setState(() {
+                  for (var dateKey in _tasksMap.keys) {
+                    if (action == '삭제') {
+                      _tasksMap[dateKey]?.removeWhere((task) => task.category == categoryToDelete);
+                    } else {
+                      for (var task in _tasksMap[dateKey] ?? []) {
+                        if (task.category == categoryToDelete) {
+                          task.category = targetCategory;
+                        }
+                      }
+                    }
+                  }
+                  _categories.remove(categoryToDelete);
+                  if (_currentCategoryFilter == categoryToDelete) {
+                    _currentCategoryFilter = '전체';
+                  }
+                });
+                _saveData(); 
+                Navigator.pop(context); 
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("'$categoryToDelete' 카테고리가 삭제되었습니다.")),
+                );
+              },
+              child: const Text('삭제 진행'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCategoryFilterDialog() {
+    List<String> filterOptions = ['전체', ..._categories];
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('카테고리 선택'),
+            TextButton.icon(
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('추가'),
+              onPressed: () {
+                Navigator.pop(context);
+                _showAddNewCategoryDialog();
+              },
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: filterOptions.map((cat) {
+              return ListTile(
+                title: Text(cat),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_currentCategoryFilter == cat)
+                      Icon(Icons.check, color: Theme.of(context).colorScheme.primary),
+                    if (cat != '전체' && cat != '기본')
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, color: Colors.grey, size: 20),
+                        onPressed: () {
+                          Navigator.pop(context); 
+                          _showDeleteCategoryDialog(cat); 
+                        },
+                      ),
+                  ],
+                ),
+                onTap: () {
+                  setState(() => _currentCategoryFilter = cat);
+                  Navigator.pop(context);
+                },
+              );
+            }).toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showTaskOptions(BuildContext context, Task task, DateTime currentDate) {
     showModalBottomSheet(
       context: context,
@@ -315,41 +510,82 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
+  // [수정됨] 할 일 추가 다이얼로그 (시간 선택 기능 포함)
   void _showAddTaskDialog() {
     _titleController.clear();
     String selectedCategory = '기본';
+    TimeOfDay? selectedStartTime;
+    TimeOfDay? selectedEndTime;
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: Text('${_selectedDate.month}월 ${_selectedDate.day}일 할 일 추가'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _titleController,
-                decoration: InputDecoration(
-                  hintText: '할 일을 입력하세요',
-                  filled: true,
-                  fillColor: Colors.grey[100],
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _titleController,
+                  decoration: InputDecoration(
+                    hintText: '할 일을 입력하세요',
+                    filled: true,
+                    fillColor: Colors.grey[100],
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  ),
+                  autofocus: true,
                 ),
-                autofocus: true,
-              ),
-              const SizedBox(height: 15),
-              DropdownButtonFormField<String>(
-                value: selectedCategory,
-                decoration: InputDecoration(
-                  icon: const Icon(Icons.folder_open, size: 24),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                const SizedBox(height: 15),
+                DropdownButtonFormField<String>(
+                  value: selectedCategory,
+                  decoration: InputDecoration(
+                    icon: const Icon(Icons.folder_open, size: 24),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  items: _categories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
+                  onChanged: (val) {
+                    if (val != null) setDialogState(() => selectedCategory = val);
+                  },
                 ),
-                items: _categories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
-                onChanged: (val) {
-                  if (val != null) setDialogState(() => selectedCategory = val);
-                },
-              ),
-            ],
+                const SizedBox(height: 15),
+                // --- 시간 선택 UI ---
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.access_time, size: 18),
+                        label: Text(selectedStartTime == null ? '시작 시간' : _formatTime(selectedStartTime!)),
+                        onPressed: () async {
+                          TimeOfDay? picked = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+                          if (picked != null) setDialogState(() => selectedStartTime = picked);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.access_time_filled, size: 18),
+                        label: Text(selectedEndTime == null ? '종료 시간' : _formatTime(selectedEndTime!)),
+                        onPressed: () async {
+                          TimeOfDay? picked = await showTimePicker(context: context, initialTime: selectedStartTime ?? TimeOfDay.now());
+                          if (picked != null) setDialogState(() => selectedEndTime = picked);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                // 시간 초기화 버튼
+                if (selectedStartTime != null || selectedEndTime != null)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => setDialogState(() { selectedStartTime = null; selectedEndTime = null; }),
+                      child: const Text('시간 초기화', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    ),
+                  )
+              ],
+            ),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
@@ -359,7 +595,13 @@ class _TaskScreenState extends State<TaskScreen> {
                   setState(() {
                     String dateKey = _getDateString(_selectedDate);
                     if (_tasksMap[dateKey] == null) _tasksMap[dateKey] = [];
-                    _tasksMap[dateKey]!.add(Task(title: _titleController.text, category: selectedCategory));
+                    
+                    _tasksMap[dateKey]!.add(Task(
+                      title: _titleController.text, 
+                      category: selectedCategory,
+                      startTime: selectedStartTime != null ? _formatTime(selectedStartTime!) : "",
+                      endTime: selectedEndTime != null ? _formatTime(selectedEndTime!) : "",
+                    ));
                   });
                   _saveData();
                   _titleController.clear();
@@ -374,9 +616,183 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  // --- 기존의 필터 및 루틴 기능은 생략 없이 그대로 적용되었습니다 ---
-  void _showCategoryFilterDialog() { /* 이전 코드와 동일 */ Navigator.pop(context); } // 분량상 기능 유지를 위해 내부에 숨김
-  void _showAddRoutineDialog() { /* 이전 코드와 동일 */ Navigator.pop(context); } // 분량상 기능 유지를 위해 내부에 숨김
+  // [수정됨] 반복 루틴 추가 다이얼로그 (시간 선택 기능 포함)
+  void _showAddRoutineDialog() {
+    _routineTitleController.clear();
+    String selectedCategory = '기본';
+    String repeatType = '매주';
+    List<int> selectedWeekdays = []; 
+    int selectedMonthDay = 1;
+    TimeOfDay? selectedStartTime;
+    TimeOfDay? selectedEndTime;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('반복 루틴 추가 (1년치)'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: _routineTitleController,
+                  decoration: InputDecoration(
+                    hintText: '루틴 이름 (예: 헬스장, 회의)',
+                    filled: true,
+                    fillColor: Colors.grey[100],
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  ),
+                  autofocus: true,
+                ),
+                const SizedBox(height: 15),
+                DropdownButtonFormField<String>(
+                  value: selectedCategory,
+                  decoration: InputDecoration(
+                    icon: const Icon(Icons.folder_open, size: 20),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  items: _categories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
+                  onChanged: (val) {
+                    if (val != null) setDialogState(() => selectedCategory = val);
+                  },
+                ),
+                const SizedBox(height: 15),
+                // --- 시간 선택 UI ---
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.access_time, size: 18),
+                        label: Text(selectedStartTime == null ? '시작 시간' : _formatTime(selectedStartTime!)),
+                        onPressed: () async {
+                          TimeOfDay? picked = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+                          if (picked != null) setDialogState(() => selectedStartTime = picked);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.access_time_filled, size: 18),
+                        label: Text(selectedEndTime == null ? '종료 시간' : _formatTime(selectedEndTime!)),
+                        onPressed: () async {
+                          TimeOfDay? picked = await showTimePicker(context: context, initialTime: selectedStartTime ?? TimeOfDay.now());
+                          if (picked != null) setDialogState(() => selectedEndTime = picked);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                if (selectedStartTime != null || selectedEndTime != null)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => setDialogState(() { selectedStartTime = null; selectedEndTime = null; }),
+                      child: const Text('시간 초기화', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    ),
+                  ),
+                const Divider(),
+                const Text('반복 주기', style: TextStyle(fontWeight: FontWeight.bold)),
+                Row(
+                  children: [
+                    Radio<String>(
+                      value: '매주', groupValue: repeatType,
+                      onChanged: (val) => setDialogState(() => repeatType = val!),
+                    ), const Text('매주 '),
+                    Radio<String>(
+                      value: '매월', groupValue: repeatType,
+                      onChanged: (val) => setDialogState(() => repeatType = val!),
+                    ), const Text('매월 '),
+                  ],
+                ),
+                if (repeatType == '매주')
+                  Wrap(
+                    spacing: 4.0,
+                    children: List.generate(7, (index) {
+                      int dayIndex = index + 1; 
+                      List<String> dayNames = ['월', '화', '수', '목', '금', '토', '일'];
+                      return FilterChip(
+                        label: Text(dayNames[index]),
+                        selected: selectedWeekdays.contains(dayIndex),
+                        onSelected: (bool selected) {
+                          setDialogState(() {
+                            if (selected) selectedWeekdays.add(dayIndex);
+                            else selectedWeekdays.remove(dayIndex);
+                          });
+                        },
+                      );
+                    }),
+                  ),
+                if (repeatType == '매월')
+                  Row(
+                    children: [
+                      const Text('매월  '),
+                      DropdownButton<int>(
+                        value: selectedMonthDay,
+                        items: List.generate(31, (index) => index + 1)
+                            .map((day) => DropdownMenuItem(value: day, child: Text('$day일')))
+                            .toList(),
+                        onChanged: (val) {
+                          if (val != null) setDialogState(() => selectedMonthDay = val);
+                        },
+                      ),
+                      const Text(' 마다'),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+            FilledButton(
+              onPressed: () {
+                if (_routineTitleController.text.isEmpty) return;
+                if (repeatType == '매주' && selectedWeekdays.isEmpty) return; 
+
+                setState(() {
+                  DateTime startDate = DateTime.now(); 
+                  for (int i = 0; i < 365; i++) {
+                    DateTime loopDate = startDate.add(Duration(days: i));
+                    bool shouldAdd = false;
+
+                    if (repeatType == '매주' && selectedWeekdays.contains(loopDate.weekday)) {
+                      shouldAdd = true;
+                    } else if (repeatType == '매월' && loopDate.day == selectedMonthDay) {
+                      shouldAdd = true;
+                    }
+
+                    if (shouldAdd) {
+                      String dateKey = _getDateString(loopDate);
+                      if (_tasksMap[dateKey] == null) _tasksMap[dateKey] = [];
+                      
+                      _tasksMap[dateKey]!.add(Task(
+                        title: _routineTitleController.text,
+                        category: selectedCategory,
+                        memo: '🔄 반복 루틴',
+                        startTime: selectedStartTime != null ? _formatTime(selectedStartTime!) : "",
+                        endTime: selectedEndTime != null ? _formatTime(selectedEndTime!) : "",
+                      ));
+                    }
+                  }
+                });
+                
+                _saveData(); 
+                _routineTitleController.clear();
+                Navigator.pop(context);
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('1년간의 반복 일정이 성공적으로 등록되었습니다!')),
+                );
+              },
+              child: const Text('등록'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -396,19 +812,29 @@ class _TaskScreenState extends State<TaskScreen> {
         : allDayTasks.where((task) => task.category == _currentCategoryFilter).toList();
 
     return Scaffold(
-      backgroundColor: Colors.grey[50], // 배경색을 아주 옅은 회색으로 주어 카드가 돋보이게 함
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: Text('${_selectedDate.month}월 ${_selectedDate.day}일', style: const TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
           IconButton(
+            icon: const Icon(Icons.repeat),
+            tooltip: '반복 루틴 추가',
+            onPressed: _showAddRoutineDialog,
+          ),
+          IconButton(
+            icon: const Icon(Icons.folder),
+            tooltip: '카테고리 필터',
+            onPressed: _showCategoryFilterDialog,
+          ),
+          IconButton(
             icon: const Icon(Icons.calendar_month),
+            tooltip: '날짜 변경',
             onPressed: () => _selectDate(context),
           ),
         ],
       ),
       body: displayTasks.isEmpty
-          // [UI 업그레이드] 텅 빈 화면 예쁘게 꾸미기
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -426,28 +852,37 @@ class _TaskScreenState extends State<TaskScreen> {
               ),
             )
           : ListView.builder(
-              padding: const EdgeInsets.only(top: 10, bottom: 80), // 리스트 위아래 여백
+              padding: const EdgeInsets.only(top: 10, bottom: 80),
               itemCount: displayTasks.length,
               itemBuilder: (context, index) {
                 final task = displayTasks[index];
+                
+                // 시간 정보가 하나라도 있으면 표시할 문자열 생성
+                String timeString = "";
+                if (task.startTime.isNotEmpty && task.endTime.isNotEmpty) {
+                  timeString = "${task.startTime} - ${task.endTime}";
+                } else if (task.startTime.isNotEmpty) {
+                  timeString = "${task.startTime} 시작";
+                } else if (task.endTime.isNotEmpty) {
+                  timeString = "${task.endTime} 까지";
+                }
 
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  // [UI 업그레이드] 카드를 둥글고 입체적으로 만듭니다
                   child: Material(
                     elevation: 2,
                     shadowColor: Colors.black12,
                     borderRadius: BorderRadius.circular(16),
                     color: Colors.white,
-                    child: InkWell( // 터치 물결 효과
+                    child: InkWell(
                       borderRadius: BorderRadius.circular(16),
                       onLongPress: () => _showTaskOptions(context, task, _selectedDate),
                       child: Padding(
                         padding: const EdgeInsets.all(4.0),
                         child: CheckboxListTile(
                           value: task.isDone,
-                          activeColor: Theme.of(context).colorScheme.primary, // 체크박스 색상을 메인 테마색으로
-                          checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)), // 체크박스 약간 둥글게
+                          activeColor: Theme.of(context).colorScheme.primary, 
+                          checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)), 
                           onChanged: (bool? newValue) {
                             setState(() => task.isDone = newValue ?? false);
                             _saveData(); 
@@ -455,18 +890,39 @@ class _TaskScreenState extends State<TaskScreen> {
                           title: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // [UI 업그레이드] 카테고리 칩 모양을 알약(Pill) 형태로 둥글게 만듭니다.
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                margin: const EdgeInsets.only(bottom: 6),
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.5),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  task.category,
-                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary),
-                                ),
+                              // 카테고리 & 시간 정보 표시
+                              Wrap(
+                                spacing: 8,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    margin: const EdgeInsets.only(bottom: 6),
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.5),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      task.category,
+                                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary),
+                                    ),
+                                  ),
+                                  if (timeString.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 6),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.access_time, size: 12, color: Colors.grey[600]),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            timeString,
+                                            style: TextStyle(fontSize: 12, color: Colors.grey[700], fontWeight: FontWeight.w500),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                ],
                               ),
                               Text(
                                 task.title,
@@ -504,7 +960,6 @@ class _TaskScreenState extends State<TaskScreen> {
                 );
               },
             ),
-      // [UI 업그레이드] 플로팅 액션 버튼 디자인 변경
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddTaskDialog,
         icon: const Icon(Icons.add),
