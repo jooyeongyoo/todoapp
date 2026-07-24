@@ -90671,7 +90671,7 @@ h.k0(new A.AP(new A.atq(this,b,d,c),s,!1,0.5625,i,i,B.QB,i,i,r.ry.e,!0,!0,i,i,i,
 G(a0){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e=this,d=null,c=e.P5(e.d),b=e.aa0(e.d),a=e.r.i(0,c)
 if(a==null)a=A.c([],t.UB)
 s=A.L(a0).ax.b
-r=A.as(s.gdY(),B.c.aL(s.gBH()*0.4),B.c.aL(s.gwC()*0.4),B.c.aL(s.gzk()*0.4))
+r=A.as(s.gdY(),B.c.aL(s.gBH()*0.15000000000000002),B.c.aL(s.gwC()*0.15000000000000002),B.c.aL(s.gzk()*0.15000000000000002))
 s=e.d
 s=A.bo(""+A.bj(s)+"\uc6d4 "+A.dp(s)+"\uc77c",d,d,d,B.cz,d,d,d)
 q=t.p
