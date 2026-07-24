@@ -171,6 +171,15 @@ class MyApp extends StatelessWidget {
                   contentTextStyle: TextStyle(color: Colors.black87),
                   titleTextStyle: TextStyle(color: Colors.black87, fontSize: 20, fontWeight: FontWeight.bold),
                 ),
+                textButtonTheme: TextButtonThemeData(
+                  style: TextButton.styleFrom(foregroundColor: Colors.black87),
+                ),
+                outlinedButtonTheme: OutlinedButtonThemeData(
+                  style: OutlinedButton.styleFrom(foregroundColor: Colors.black87),
+                ),
+                filledButtonTheme: FilledButtonThemeData(
+                  style: FilledButton.styleFrom(foregroundColor: Colors.black87),
+                ),
               ),
               home: const TaskScreen(),
             );
