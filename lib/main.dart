@@ -2,26 +2,29 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart'; 
+import 'package:table_calendar/table_calendar.dart'; 
 
-// 1. Task 클래스 (시간 속성 추가)
 class Task {
+  String id;
   String title;
   bool isDone;
   String memo;
   String category;
-  String startTime; // [신규] 시작 시간
-  String endTime;   // [신규] 종료 시간
+  String startTime;
+  String endTime;
 
   Task({
+    String? id,
     required this.title,
     this.isDone = false,
     this.memo = "",
     this.category = "기본",
     this.startTime = "",
     this.endTime = "",
-  });
+  }) : id = id ?? DateTime.now().millisecondsSinceEpoch.toString() + title;
 
   Map<String, dynamic> toJson() => {
+    'id': id,
     'title': title,
     'isDone': isDone,
     'memo': memo,
@@ -31,6 +34,7 @@ class Task {
   };
 
   factory Task.fromJson(Map<String, dynamic> json) => Task(
+    id: json['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
     title: json['title'],
     isDone: json['isDone'] ?? false,
     memo: json['memo'] ?? "",
@@ -40,31 +44,139 @@ class Task {
   );
 }
 
-void main() {
+class Routine {
+  String id;
+  String title;
+  String memo;
+  String category;
+  String startTime;
+  String endTime;
+  String repeatType;
+  String repeatValue;
+  DateTime startDate;
+
+  Routine({
+    String? id,
+    required this.title,
+    this.memo = "",
+    this.category = "기본",
+    this.startTime = "",
+    this.endTime = "",
+    required this.repeatType,
+    required this.repeatValue,
+    required this.startDate,
+  }) : id = id ?? DateTime.now().millisecondsSinceEpoch.toString() + title;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'memo': memo,
+    'category': category,
+    'startTime': startTime,
+    'endTime': endTime,
+    'repeatType': repeatType,
+    'repeatValue': repeatValue,
+    'startDate': startDate.toIso8601String(),
+  };
+
+  factory Routine.fromJson(Map<String, dynamic> json) => Routine(
+    id: json['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
+    title: json['title'],
+    memo: json['memo'] ?? "",
+    category: json['category'] ?? "기본",
+    startTime: json['startTime'] ?? "",
+    endTime: json['endTime'] ?? "",
+    repeatType: json['repeatType'] ?? "매주",
+    repeatValue: json['repeatValue'] ?? "",
+    startDate: json['startDate'] != null ? DateTime.parse(json['startDate']) : DateTime.now(),
+  );
+}
+
+final ValueNotifier<Color> appThemeColor = ValueNotifier<Color>(const Color(0xFFE2F0CB));
+final ValueNotifier<String> appFontFamily = ValueNotifier<String>('Noto Sans KR');
+
+Color _darkenColor(Color c, [int percent = 40]) {
+  assert(1 <= percent && percent <= 100);
+  var f = 1 - percent / 100;
+  return Color.fromARGB(
+    c.alpha,
+    (c.red * f).round(),
+    (c.green * f).round(),
+    (c.blue * f).round()
+  );
+}
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  
+  final colorInt = prefs.getInt('themeColor');
+  if (colorInt != null) {
+    appThemeColor.value = Color(colorInt);
+  }
+  
+  final fontStr = prefs.getString('themeFont');
+  if (fontStr != null) {
+    appFontFamily.value = fontStr;
+  }
+  
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
+  TextTheme _getTextTheme(String font, TextTheme base) {
+    switch (font) {
+      case 'Nanum Pen Script': return GoogleFonts.nanumPenScriptTextTheme(base);
+      case 'Jua': return GoogleFonts.juaTextTheme(base);
+      case 'Dongle': return GoogleFonts.dongleTextTheme(base);
+      case 'Gowun Dodum': return GoogleFonts.gowunDodumTextTheme(base);
+      case 'Noto Sans KR':
+      default:
+        return GoogleFonts.notoSansKrTextTheme(base);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: '스케줄 앱',
-      debugShowCheckedModeBanner: false, 
-      theme: ThemeData(
-        useMaterial3: true, 
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6A9C89),
-          brightness: Brightness.light,
-        ),
-        textTheme: GoogleFonts.notoSansKrTextTheme(Theme.of(context).textTheme),
-        appBarTheme: const AppBarTheme(
-          centerTitle: true,
-          elevation: 0,
-        ),
-      ),
-      home: const TaskScreen(),
+    return ValueListenableBuilder<Color>(
+      valueListenable: appThemeColor,
+      builder: (context, color, child) {
+        return ValueListenableBuilder<String>(
+          valueListenable: appFontFamily,
+          builder: (context, font, child) {
+            return MaterialApp(
+              title: '스케줄 앱',
+              debugShowCheckedModeBanner: false, 
+              theme: ThemeData(
+                useMaterial3: true, 
+                colorScheme: ColorScheme.fromSeed(
+                  seedColor: color,
+                  primary: color,
+                  brightness: Brightness.light,
+                ),
+                textTheme: _getTextTheme(font, Theme.of(context).textTheme),
+                appBarTheme: AppBarTheme(
+                  centerTitle: true,
+                  elevation: 0,
+                  backgroundColor: color,
+                  foregroundColor: Colors.black87,
+                ),
+                inputDecorationTheme: const InputDecorationTheme(
+                  labelStyle: TextStyle(color: Colors.black87),
+                  floatingLabelStyle: TextStyle(color: Colors.black87),
+                ),
+                dialogTheme: const DialogThemeData(
+                  contentTextStyle: TextStyle(color: Colors.black87),
+                  titleTextStyle: TextStyle(color: Colors.black87, fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+              ),
+              home: const TaskScreen(),
+            );
+          },
+        );
+      }
     );
   }
 }
@@ -78,15 +190,13 @@ class TaskScreen extends StatefulWidget {
 
 class _TaskScreenState extends State<TaskScreen> {
   DateTime _selectedDate = DateTime.now();
+  DateTime _focusedDate = DateTime.now();
+  CalendarFormat _calendarFormat = CalendarFormat.week;
+  
   final Map<String, List<Task>> _tasksMap = {};
-  
-  List<String> _categories = ['기본', '업무', '개인', '운동'];
-  String _currentCategoryFilter = '전체';
-  
-  final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _memoController = TextEditingController();
-  final TextEditingController _categoryController = TextEditingController();
-  final TextEditingController _routineTitleController = TextEditingController();
+  List<Routine> _routines = [];
+  final Map<String, List<String>> _completedRoutines = {}; 
+  List<String> _categories = ['기본', '업무', '개인'];
 
   @override
   void initState() {
@@ -94,878 +204,965 @@ class _TaskScreenState extends State<TaskScreen> {
     _loadData();
   }
 
-  // --- 데이터 불러오기/저장하기 ---
+  String _getDateKey(DateTime date) {
+    return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+  }
+
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
-    List<String>? savedCategories = prefs.getStringList('categories');
-    if (savedCategories != null) _categories = savedCategories;
-
-    String? jsonString = prefs.getString('tasksMap');
-    if (jsonString != null) {
-      Map<String, dynamic> decodedMap = jsonDecode(jsonString);
-      Map<String, List<Task>> loadedTasks = {};
-      decodedMap.forEach((key, value) {
-        loadedTasks[key] = (value as List).map((item) => Task.fromJson(item)).toList();
-      });
-      setState(() => _tasksMap.addAll(loadedTasks));
+    
+    // Load categories
+    String? categoriesData = prefs.getString('categories');
+    if (categoriesData != null) {
+      _categories = List<String>.from(jsonDecode(categoriesData));
     }
+    
+    // Load tasks
+    String? tasksData = prefs.getString('tasks');
+    if (tasksData != null) {
+      Map<String, dynamic> decoded = jsonDecode(tasksData);
+      decoded.forEach((key, value) {
+        _tasksMap[key] = (value as List).map((taskJson) => Task.fromJson(taskJson)).toList();
+      });
+    }
+    
+    // Load routines
+    String? routinesData = prefs.getString('routines');
+    if (routinesData != null) {
+      List<dynamic> decoded = jsonDecode(routinesData);
+      _routines = decoded.map((json) => Routine.fromJson(json)).toList();
+    }
+    
+    // Load routine completions
+    String? completionsData = prefs.getString('routineCompletions');
+    if (completionsData != null) {
+      Map<String, dynamic> decoded = jsonDecode(completionsData);
+      decoded.forEach((key, value) {
+        _completedRoutines[key] = List<String>.from(value);
+      });
+    }
+
+    setState(() {});
   }
 
   Future<void> _saveData() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('categories', _categories);
-
-    Map<String, dynamic> encodedMap = {};
-    _tasksMap.forEach((key, list) {
-      encodedMap[key] = list.map((task) => task.toJson()).toList();
+    await prefs.setString('categories', jsonEncode(_categories));
+    
+    Map<String, dynamic> encodedTasks = {};
+    _tasksMap.forEach((key, value) {
+      encodedTasks[key] = value.map((task) => task.toJson()).toList();
     });
-    await prefs.setString('tasksMap', jsonEncode(encodedMap));
+    await prefs.setString('tasks', jsonEncode(encodedTasks));
+    
+    await prefs.setString('routines', jsonEncode(_routines.map((r) => r.toJson()).toList()));
+    
+    await prefs.setString('routineCompletions', jsonEncode(_completedRoutines));
   }
 
-  // --- 날짜 및 시간 유틸리티 ---
-  String _getDateString(DateTime date) {
-    return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+  List<Routine> _getTodayRoutines(DateTime date) {
+    return _routines.where((r) {
+      DateTime start = DateTime(r.startDate.year, r.startDate.month, r.startDate.day);
+      DateTime checkDate = DateTime(date.year, date.month, date.day);
+      if (checkDate.isBefore(start)) return false;
+      
+      try {
+        if (r.repeatType == '매주') {
+          if (r.repeatValue.isEmpty) return false;
+          List<int> days = r.repeatValue.split(',').map((e) => int.parse(e.trim())).toList();
+          return days.contains(checkDate.weekday);
+        } else if (r.repeatType == '매월') {
+          if (r.repeatValue.isEmpty) return false;
+          int day = int.parse(r.repeatValue.trim());
+          return checkDate.day == day;
+        } else if (r.repeatType == 'N일마다') {
+          if (r.repeatValue.isEmpty) return false;
+          int interval = int.parse(r.repeatValue.trim());
+          if (interval <= 0) return false;
+          int diff = checkDate.difference(start).inDays;
+          return diff % interval == 0;
+        }
+      } catch (e) {
+        return false;
+      }
+      return false;
+    }).toList();
   }
 
-  // [신규] TimeOfDay를 '오전/오후 00:00' 형태의 한국어 문자열로 바꿔주는 함수
-  String _formatTime(TimeOfDay time) {
-    final hour = time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod;
-    final period = time.period == DayPeriod.am ? '오전' : '오후';
-    final minute = time.minute.toString().padLeft(2, '0');
-    return '$period $hour:$minute';
-  }
-
-  // --- 기존 달력/팝업 기능들 ---
-  Future<void> _selectDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2030),
-    );
-    if (picked != null && picked != _selectedDate) {
-      setState(() {
-        _selectedDate = picked;
-        _currentCategoryFilter = '전체';
-      });
-    }
-  }
-
-  void _moveTaskToDate(Task task, DateTime fromDate, DateTime toDate) {
-    setState(() {
-      String fromKey = _getDateString(fromDate);
-      String toKey = _getDateString(toDate);
-      _tasksMap[fromKey]?.remove(task);
-      if (_tasksMap[toKey] == null) _tasksMap[toKey] = [];
-      _tasksMap[toKey]!.add(task);
-    });
-    _saveData();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${toDate.month}월 ${toDate.day}일로 일정이 이동되었습니다.'), behavior: SnackBarBehavior.floating),
-    );
-  }
-
-  Future<void> _selectDateAndMoveTask(Task task, DateTime currentDate) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: currentDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2030),
-    );
-    if (picked != null && picked != currentDate) {
-      _moveTaskToDate(task, currentDate, picked);
-    }
-  }
-
-  void _showEditTitleDialog(Task task) {
-    _titleController.text = task.title; 
+  void _showAddRoutineDialog() {
+    TextEditingController titleController = TextEditingController();
+    String selectedCategory = _categories.first;
+    String repeatType = '매주';
+    String repeatValue = '1';
+    List<int> selectedWeekdays = [1];
+    TextEditingController intervalController = TextEditingController(text: '3');
+    
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('이름 변경'),
-        content: TextField(
-          controller: _titleController,
-          decoration: InputDecoration(
-            hintText: '새로운 이름을 입력하세요',
-            filled: true,
-            fillColor: Colors.grey[100],
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
-          FilledButton(
-            onPressed: () {
-              if (_titleController.text.isNotEmpty) {
-                setState(() => task.title = _titleController.text);
-                _saveData(); 
-                _titleController.clear();
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('저장'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showEditMemoDetailsDialog(Task task) {
-    _memoController.text = task.memo; 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('상세 메모 작성'),
-        content: TextField(
-          controller: _memoController,
-          decoration: InputDecoration(
-            hintText: '참고할 내용을 입력하세요',
-            filled: true,
-            fillColor: Colors.grey[100],
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-          ),
-          maxLines: 3,
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
-          FilledButton(
-            onPressed: () {
-              setState(() => task.memo = _memoController.text);
-              _saveData();
-              _memoController.clear();
-              Navigator.pop(context);
-            },
-            child: const Text('저장'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showEditCategoryDialog(Task task) {
-    String selectedCategory = task.category;
-    if (!_categories.contains(selectedCategory)) _categories.add(selectedCategory);
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('카테고리 변경'),
-          content: DropdownButtonFormField<String>(
-            value: selectedCategory,
-            decoration: InputDecoration(
-              icon: const Icon(Icons.folder_open),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            items: _categories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
-            onChanged: (val) {
-              if (val != null) setDialogState(() => selectedCategory = val);
-            },
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
-            FilledButton(
-              onPressed: () {
-                setState(() => task.category = selectedCategory);
-                _saveData(); 
-                Navigator.pop(context);
-              },
-              child: const Text('저장'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showAddNewCategoryDialog() {
-    TextEditingController newCategoryController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('새 카테고리 추가'),
-        content: TextField(
-          controller: newCategoryController,
-          decoration: InputDecoration(
-            hintText: '카테고리 이름 입력',
-            filled: true,
-            fillColor: Colors.grey[100],
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
-          FilledButton(
-            onPressed: () {
-              if (newCategoryController.text.isNotEmpty) {
-                setState(() {
-                  if (!_categories.contains(newCategoryController.text)) {
-                    _categories.add(newCategoryController.text);
-                  }
-                });
-                _saveData(); 
-                Navigator.pop(context);
-                _showCategoryFilterDialog(); 
-              }
-            },
-            child: const Text('저장'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showDeleteCategoryDialog(String categoryToDelete) {
-    String action = '이동'; 
-    List<String> availableCategories = _categories.where((c) => c != categoryToDelete).toList();
-    String targetCategory = availableCategories.first; 
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('카테고리 삭제'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text("'$categoryToDelete' 카테고리를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다."),
-              const SizedBox(height: 20),
-              const Text('포함된 할 일 처리 방법', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
-              const SizedBox(height: 8),
-              RadioListTile<String>(
-                title: const Text('다른 카테고리로 이동'),
-                value: '이동',
-                groupValue: action,
-                contentPadding: EdgeInsets.zero,
-                onChanged: (val) {
-                  setDialogState(() => action = val!);
-                },
-              ),
-              if (action == '이동')
-                Padding(
-                  padding: const EdgeInsets.only(left: 32.0, bottom: 8.0, right: 8.0),
-                  child: DropdownButtonFormField<String>(
-                    value: targetCategory,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('반복 루틴 추가', style: TextStyle(fontWeight: FontWeight.bold)),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: titleController,
+                      decoration: InputDecoration(
+                        labelText: '루틴 내용',
+                        filled: true,
+                        fillColor: Colors.grey[100],
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      ),
                     ),
-                    items: availableCategories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
-                    onChanged: (val) {
-                      if (val != null) setDialogState(() => targetCategory = val);
-                    },
-                  ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: selectedCategory,
+                      decoration: InputDecoration(
+                        labelText: '카테고리',
+                        filled: true,
+                        fillColor: Colors.grey[100],
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      ),
+                      items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                      onChanged: (val) => setDialogState(() => selectedCategory = val!),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: repeatType,
+                      decoration: InputDecoration(
+                        labelText: '반복 유형',
+                        filled: true,
+                        fillColor: Colors.grey[100],
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      ),
+                      items: ['매주', '매월', 'N일마다'].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                      onChanged: (val) => setDialogState(() {
+                        repeatType = val!;
+                        if (repeatType == '매주') selectedWeekdays = [1];
+                        if (repeatType == '매월') repeatValue = '1';
+                        if (repeatType == 'N일마다') repeatValue = intervalController.text;
+                      }),
+                    ),
+                    const SizedBox(height: 16),
+                    if (repeatType == '매주')
+                      Wrap(
+                        spacing: 8,
+                        children: [1, 2, 3, 4, 5, 6, 7].map((day) {
+                          final dayNames = ['월', '화', '수', '목', '금', '토', '일'];
+                          final isSelected = selectedWeekdays.contains(day);
+                          return ChoiceChip(
+                            label: Text(dayNames[day - 1]),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              setDialogState(() {
+                                if (selected) {
+                                  selectedWeekdays.add(day);
+                                } else {
+                                  if (selectedWeekdays.length > 1) {
+                                    selectedWeekdays.remove(day);
+                                  }
+                                }
+                                repeatValue = selectedWeekdays.join(',');
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    if (repeatType == '매월')
+                      DropdownButtonFormField<String>(
+                        value: repeatValue,
+                        decoration: InputDecoration(
+                          labelText: '반복할 일',
+                          filled: true,
+                          fillColor: Colors.grey[100],
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        ),
+                        items: List.generate(31, (i) => (i + 1).toString())
+                            .map((d) => DropdownMenuItem(value: d, child: Text('$d일')))
+                            .toList(),
+                        onChanged: (val) => setDialogState(() => repeatValue = val!),
+                      ),
+                    if (repeatType == 'N일마다')
+                      TextField(
+                        controller: intervalController,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          labelText: '반복 주기 (일)',
+                          filled: true,
+                          fillColor: Colors.grey[100],
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        ),
+                        onChanged: (val) {
+                          repeatValue = val;
+                        },
+                      ),
+                  ],
                 ),
-              RadioListTile<String>(
-                title: const Text('할 일도 함께 모두 삭제', style: TextStyle(color: Colors.redAccent)),
-                value: '삭제',
-                groupValue: action,
-                contentPadding: EdgeInsets.zero,
-                onChanged: (val) {
-                  setDialogState(() => action = val!);
-                },
               ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
-              onPressed: () {
-                setState(() {
-                  for (var dateKey in _tasksMap.keys) {
-                    if (action == '삭제') {
-                      _tasksMap[dateKey]?.removeWhere((task) => task.category == categoryToDelete);
-                    } else {
-                      for (var task in _tasksMap[dateKey] ?? []) {
-                        if (task.category == categoryToDelete) {
-                          task.category = targetCategory;
-                        }
-                      }
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+                FilledButton(
+                  onPressed: () {
+                    if (titleController.text.isNotEmpty) {
+                      if (repeatType == '매주') repeatValue = selectedWeekdays.join(',');
+                      if (repeatType == 'N일마다' && intervalController.text.isEmpty) repeatValue = '1';
+                      
+                      Routine newRoutine = Routine(
+                        title: titleController.text,
+                        category: selectedCategory,
+                        repeatType: repeatType,
+                        repeatValue: repeatValue,
+                        startDate: DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day),
+                      );
+                      setState(() {
+                        _routines.add(newRoutine);
+                      });
+                      _saveData();
+                      Navigator.pop(context);
                     }
-                  }
-                  _categories.remove(categoryToDelete);
-                  if (_currentCategoryFilter == categoryToDelete) {
-                    _currentCategoryFilter = '전체';
-                  }
-                });
-                _saveData(); 
-                Navigator.pop(context); 
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("'$categoryToDelete' 카테고리가 삭제되었습니다.")),
-                );
-              },
-              child: const Text('삭제 진행'),
-            ),
-          ],
-        ),
-      ),
+                  },
+                  child: const Text('추가'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
-  void _showCategoryFilterDialog() {
-    List<String> filterOptions = ['전체', ..._categories];
+  void _showAddTaskDialog() {
+    TextEditingController titleController = TextEditingController();
+    String selectedCategory = _categories.first;
+    TimeOfDay? startTime;
+    TimeOfDay? endTime;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('카테고리 선택'),
-            TextButton.icon(
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('추가'),
-              onPressed: () {
-                Navigator.pop(context);
-                _showAddNewCategoryDialog();
-              },
-            ),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: filterOptions.map((cat) {
-              return ListTile(
-                title: Text(cat),
-                trailing: Row(
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('할 일 추가', style: TextStyle(fontWeight: FontWeight.bold)),
+              content: SingleChildScrollView(
+                child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (_currentCategoryFilter == cat)
-                      Icon(Icons.check, color: Theme.of(context).colorScheme.primary),
-                    if (cat != '전체' && cat != '기본')
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline, color: Colors.grey, size: 20),
-                        onPressed: () {
-                          Navigator.pop(context); 
-                          _showDeleteCategoryDialog(cat); 
-                        },
+                    TextField(
+                      controller: titleController,
+                      decoration: InputDecoration(
+                        labelText: '할 일 내용',
+                        filled: true,
+                        fillColor: Colors.grey[100],
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                       ),
+                      autofocus: true,
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: selectedCategory,
+                      decoration: InputDecoration(
+                        labelText: '카테고리',
+                        filled: true,
+                        fillColor: Colors.grey[100],
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      ),
+                      items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                      onChanged: (val) => setDialogState(() => selectedCategory = val!),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            final time = await showTimePicker(context: context, initialTime: TimeOfDay.now(), initialEntryMode: TimePickerEntryMode.input);
+                            if (time != null) setDialogState(() => startTime = time);
+                          },
+                          icon: const Icon(Icons.access_time, size: 16),
+                          label: Text(startTime != null ? startTime!.format(context) : '시작 시간'),
+                          style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                        ),
+                        const SizedBox(width: 8),
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            final time = await showTimePicker(context: context, initialTime: TimeOfDay.now(), initialEntryMode: TimePickerEntryMode.input);
+                            if (time != null) setDialogState(() => endTime = time);
+                          },
+                          icon: const Icon(Icons.access_time, size: 16),
+                          label: Text(endTime != null ? endTime!.format(context) : '종료 시간'),
+                          style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
-                onTap: () {
-                  setState(() => _currentCategoryFilter = cat);
-                  Navigator.pop(context);
-                },
-              );
-            }).toList(),
-          ),
-        ),
-      ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+                FilledButton(
+                  onPressed: () {
+                    if (titleController.text.isNotEmpty) {
+                      setState(() {
+                        String dateKey = _getDateKey(_selectedDate);
+                        if (_tasksMap[dateKey] == null) _tasksMap[dateKey] = [];
+                        _tasksMap[dateKey]!.add(Task(
+                          title: titleController.text,
+                          category: selectedCategory,
+                          startTime: startTime != null ? startTime!.format(context) : '',
+                          endTime: endTime != null ? endTime!.format(context) : '',
+                        ));
+                      });
+                      _saveData();
+                      Navigator.pop(context);
+                    }
+                  },
+                  child: const Text('저장'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
-  void _showTaskOptions(BuildContext context, Task task, DateTime currentDate) {
+  void _showEditMemoDetailsDialog(dynamic item, String itemType) {
+    // item is either Task or Routine. Note: Routines modifying memo is tricky because they are definitions.
+    // For simplicity, modifying a Routine's memo applies to the Routine globally.
+    TextEditingController memoController = TextEditingController(text: item.memo);
+    TextEditingController titleController = TextEditingController(text: item.title);
+    TimeOfDay? parsedStartTime;
+    TimeOfDay? parsedEndTime;
+    
+    if (item.startTime.isNotEmpty) {
+      final parts = item.startTime.split(RegExp(r'[:\s]'));
+      if (parts.length >= 2) {
+        int h = int.tryParse(parts[0]) ?? 0;
+        int m = int.tryParse(parts[1]) ?? 0;
+        if (item.startTime.contains('PM') && h < 12) h += 12;
+        if (item.startTime.contains('AM') && h == 12) h = 0;
+        parsedStartTime = TimeOfDay(hour: h, minute: m);
+      }
+    }
+    if (item.endTime.isNotEmpty) {
+      final parts = item.endTime.split(RegExp(r'[:\s]'));
+      if (parts.length >= 2) {
+        int h = int.tryParse(parts[0]) ?? 0;
+        int m = int.tryParse(parts[1]) ?? 0;
+        if (item.endTime.contains('PM') && h < 12) h += 12;
+        if (item.endTime.contains('AM') && h == 12) h = 0;
+        parsedEndTime = TimeOfDay(hour: h, minute: m);
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('상세 내용 수정', style: TextStyle(fontWeight: FontWeight.bold)),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: titleController,
+                      decoration: InputDecoration(
+                        labelText: '제목',
+                        filled: true,
+                        fillColor: Colors.grey[100],
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: memoController,
+                      decoration: InputDecoration(
+                        labelText: '메모 (길게 눌러서 추가 가능)',
+                        filled: true,
+                        fillColor: Colors.grey[100],
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      ),
+                      maxLines: 3,
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            final time = await showTimePicker(context: context, initialTime: parsedStartTime ?? TimeOfDay.now(), initialEntryMode: TimePickerEntryMode.input);
+                            if (time != null) setDialogState(() => parsedStartTime = time);
+                          },
+                          icon: const Icon(Icons.access_time, size: 16),
+                          label: Text(parsedStartTime != null ? parsedStartTime!.format(context) : '시작 시간'),
+                          style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                        ),
+                        const SizedBox(width: 8),
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            final time = await showTimePicker(context: context, initialTime: parsedEndTime ?? TimeOfDay.now(), initialEntryMode: TimePickerEntryMode.input);
+                            if (time != null) setDialogState(() => parsedEndTime = time);
+                          },
+                          icon: const Icon(Icons.access_time, size: 16),
+                          label: Text(parsedEndTime != null ? parsedEndTime!.format(context) : '종료 시간'),
+                          style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+                FilledButton(
+                  onPressed: () {
+                    setState(() {
+                      item.title = titleController.text;
+                      item.memo = memoController.text;
+                      item.startTime = parsedStartTime != null ? parsedStartTime!.format(context) : '';
+                      item.endTime = parsedEndTime != null ? parsedEndTime!.format(context) : '';
+                    });
+                    _saveData();
+                    Navigator.pop(context);
+                  },
+                  child: const Text('저장'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showTaskOptions(BuildContext context, dynamic item, String dateKey, String itemType) {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20.0))),
-      builder: (BuildContext ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10.0),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10))),
-              const SizedBox(height: 10),
               ListTile(
-                leading: const Icon(Icons.subject), title: const Text('상세 메모 작성/수정'),
-                onTap: () { Navigator.pop(context); _showEditMemoDetailsDialog(task); },
-              ),
-              ListTile(
-                leading: const Icon(Icons.edit), title: const Text('이름 변경'),
-                onTap: () { Navigator.pop(context); _showEditTitleDialog(task); },
-              ),
-              ListTile(
-                leading: const Icon(Icons.folder), title: const Text('카테고리 변경'),
-                onTap: () { Navigator.pop(context); _showEditCategoryDialog(task); },
-              ),
-              ListTile(
-                leading: const Icon(Icons.next_plan), title: const Text('내일 하기'),
+                leading: const Icon(Icons.edit_note, color: Colors.blue),
+                title: const Text('수정하기'),
                 onTap: () {
                   Navigator.pop(context);
-                  _moveTaskToDate(task, currentDate, currentDate.add(const Duration(days: 1))); 
+                  _showEditMemoDetailsDialog(item, itemType);
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.calendar_month), title: const Text('다른 날 하기'),
-                onTap: () { Navigator.pop(context); _selectDateAndMoveTask(task, currentDate); },
-              ),
-              ListTile(
-                leading: const Icon(Icons.delete, color: Colors.redAccent),
-                title: const Text('삭제하기', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text('삭제하기'),
                 onTap: () {
+                  setState(() {
+                    if (itemType == 'task') {
+                      _tasksMap[dateKey]?.remove(item);
+                    } else if (itemType == 'routine') {
+                      _routines.removeWhere((r) => r.id == item.id);
+                    }
+                  });
+                  _saveData();
                   Navigator.pop(context);
-                  setState(() => _tasksMap[_getDateString(currentDate)]?.remove(task));
-                  _saveData(); 
                 },
               ),
             ],
           ),
-        ),
-      ),
+        );
+      },
     );
-  }
-
-  // [수정됨] 할 일 추가 다이얼로그 (시간 선택 기능 포함)
-  void _showAddTaskDialog() {
-    _titleController.clear();
-    String selectedCategory = '기본';
-    TimeOfDay? selectedStartTime;
-    TimeOfDay? selectedEndTime;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text('${_selectedDate.month}월 ${_selectedDate.day}일 할 일 추가'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: _titleController,
-                  decoration: InputDecoration(
-                    hintText: '할 일을 입력하세요',
-                    filled: true,
-                    fillColor: Colors.grey[100],
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                  ),
-                  autofocus: true,
-                ),
-                const SizedBox(height: 15),
-                DropdownButtonFormField<String>(
-                  value: selectedCategory,
-                  decoration: InputDecoration(
-                    icon: const Icon(Icons.folder_open, size: 24),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  items: _categories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
-                  onChanged: (val) {
-                    if (val != null) setDialogState(() => selectedCategory = val);
-                  },
-                ),
-                const SizedBox(height: 15),
-                // --- 시간 선택 UI ---
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        icon: const Icon(Icons.access_time, size: 18),
-                        label: Text(selectedStartTime == null ? '시작 시간' : _formatTime(selectedStartTime!)),
-                        onPressed: () async {
-                          TimeOfDay? picked = await showTimePicker(context: context, initialTime: TimeOfDay.now());
-                          if (picked != null) setDialogState(() => selectedStartTime = picked);
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        icon: const Icon(Icons.access_time_filled, size: 18),
-                        label: Text(selectedEndTime == null ? '종료 시간' : _formatTime(selectedEndTime!)),
-                        onPressed: () async {
-                          TimeOfDay? picked = await showTimePicker(context: context, initialTime: selectedStartTime ?? TimeOfDay.now());
-                          if (picked != null) setDialogState(() => selectedEndTime = picked);
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                // 시간 초기화 버튼
-                if (selectedStartTime != null || selectedEndTime != null)
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: () => setDialogState(() { selectedStartTime = null; selectedEndTime = null; }),
-                      child: const Text('시간 초기화', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                    ),
-                  )
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
-            FilledButton(
-              onPressed: () {
-                if (_titleController.text.isNotEmpty) {
-                  setState(() {
-                    String dateKey = _getDateString(_selectedDate);
-                    if (_tasksMap[dateKey] == null) _tasksMap[dateKey] = [];
-                    
-                    _tasksMap[dateKey]!.add(Task(
-                      title: _titleController.text, 
-                      category: selectedCategory,
-                      startTime: selectedStartTime != null ? _formatTime(selectedStartTime!) : "",
-                      endTime: selectedEndTime != null ? _formatTime(selectedEndTime!) : "",
-                    ));
-                  });
-                  _saveData();
-                  _titleController.clear();
-                  Navigator.pop(context);
-                }
-              },
-              child: const Text('저장'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // [수정됨] 반복 루틴 추가 다이얼로그 (시간 선택 기능 포함)
-  void _showAddRoutineDialog() {
-    _routineTitleController.clear();
-    String selectedCategory = '기본';
-    String repeatType = '매주';
-    List<int> selectedWeekdays = []; 
-    int selectedMonthDay = 1;
-    TimeOfDay? selectedStartTime;
-    TimeOfDay? selectedEndTime;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('반복 루틴 추가 (1년치)'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  controller: _routineTitleController,
-                  decoration: InputDecoration(
-                    hintText: '루틴 이름 (예: 헬스장, 회의)',
-                    filled: true,
-                    fillColor: Colors.grey[100],
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                  ),
-                  autofocus: true,
-                ),
-                const SizedBox(height: 15),
-                DropdownButtonFormField<String>(
-                  value: selectedCategory,
-                  decoration: InputDecoration(
-                    icon: const Icon(Icons.folder_open, size: 20),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  items: _categories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
-                  onChanged: (val) {
-                    if (val != null) setDialogState(() => selectedCategory = val);
-                  },
-                ),
-                const SizedBox(height: 15),
-                // --- 시간 선택 UI ---
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        icon: const Icon(Icons.access_time, size: 18),
-                        label: Text(selectedStartTime == null ? '시작 시간' : _formatTime(selectedStartTime!)),
-                        onPressed: () async {
-                          TimeOfDay? picked = await showTimePicker(context: context, initialTime: TimeOfDay.now());
-                          if (picked != null) setDialogState(() => selectedStartTime = picked);
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        icon: const Icon(Icons.access_time_filled, size: 18),
-                        label: Text(selectedEndTime == null ? '종료 시간' : _formatTime(selectedEndTime!)),
-                        onPressed: () async {
-                          TimeOfDay? picked = await showTimePicker(context: context, initialTime: selectedStartTime ?? TimeOfDay.now());
-                          if (picked != null) setDialogState(() => selectedEndTime = picked);
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                if (selectedStartTime != null || selectedEndTime != null)
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: () => setDialogState(() { selectedStartTime = null; selectedEndTime = null; }),
-                      child: const Text('시간 초기화', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                    ),
-                  ),
-                const Divider(),
-                const Text('반복 주기', style: TextStyle(fontWeight: FontWeight.bold)),
-                Row(
-                  children: [
-                    Radio<String>(
-                      value: '매주', groupValue: repeatType,
-                      onChanged: (val) => setDialogState(() => repeatType = val!),
-                    ), const Text('매주 '),
-                    Radio<String>(
-                      value: '매월', groupValue: repeatType,
-                      onChanged: (val) => setDialogState(() => repeatType = val!),
-                    ), const Text('매월 '),
-                  ],
-                ),
-                if (repeatType == '매주')
-                  Wrap(
-                    spacing: 4.0,
-                    children: List.generate(7, (index) {
-                      int dayIndex = index + 1; 
-                      List<String> dayNames = ['월', '화', '수', '목', '금', '토', '일'];
-                      return FilterChip(
-                        label: Text(dayNames[index]),
-                        selected: selectedWeekdays.contains(dayIndex),
-                        onSelected: (bool selected) {
-                          setDialogState(() {
-                            if (selected) selectedWeekdays.add(dayIndex);
-                            else selectedWeekdays.remove(dayIndex);
-                          });
-                        },
-                      );
-                    }),
-                  ),
-                if (repeatType == '매월')
-                  Row(
-                    children: [
-                      const Text('매월  '),
-                      DropdownButton<int>(
-                        value: selectedMonthDay,
-                        items: List.generate(31, (index) => index + 1)
-                            .map((day) => DropdownMenuItem(value: day, child: Text('$day일')))
-                            .toList(),
-                        onChanged: (val) {
-                          if (val != null) setDialogState(() => selectedMonthDay = val);
-                        },
-                      ),
-                      const Text(' 마다'),
-                    ],
-                  ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
-            FilledButton(
-              onPressed: () {
-                if (_routineTitleController.text.isEmpty) return;
-                if (repeatType == '매주' && selectedWeekdays.isEmpty) return; 
-
-                setState(() {
-                  DateTime startDate = DateTime.now(); 
-                  for (int i = 0; i < 365; i++) {
-                    DateTime loopDate = startDate.add(Duration(days: i));
-                    bool shouldAdd = false;
-
-                    if (repeatType == '매주' && selectedWeekdays.contains(loopDate.weekday)) {
-                      shouldAdd = true;
-                    } else if (repeatType == '매월' && loopDate.day == selectedMonthDay) {
-                      shouldAdd = true;
-                    }
-
-                    if (shouldAdd) {
-                      String dateKey = _getDateString(loopDate);
-                      if (_tasksMap[dateKey] == null) _tasksMap[dateKey] = [];
-                      
-                      _tasksMap[dateKey]!.add(Task(
-                        title: _routineTitleController.text,
-                        category: selectedCategory,
-                        memo: '🔄 반복 루틴',
-                        startTime: selectedStartTime != null ? _formatTime(selectedStartTime!) : "",
-                        endTime: selectedEndTime != null ? _formatTime(selectedEndTime!) : "",
-                      ));
-                    }
-                  }
-                });
-                
-                _saveData(); 
-                _routineTitleController.clear();
-                Navigator.pop(context);
-                
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('1년간의 반복 일정이 성공적으로 등록되었습니다!')),
-                );
-              },
-              child: const Text('등록'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _memoController.dispose();
-    _categoryController.dispose();
-    _routineTitleController.dispose();
-    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    String dateKey = _getDateString(_selectedDate);
-    List<Task> allDayTasks = _tasksMap[dateKey] ?? [];
-    List<Task> displayTasks = _currentCategoryFilter == '전체' 
-        ? allDayTasks 
-        : allDayTasks.where((task) => task.category == _currentCategoryFilter).toList();
+    String dateKey = _getDateKey(_selectedDate);
+    List<Routine> todayRoutines = _getTodayRoutines(_selectedDate);
+    List<Task> todayTasks = _tasksMap[dateKey] ?? [];
+
+    Color fontColor = _darkenColor(Theme.of(context).colorScheme.primary, 85);
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: Text('${_selectedDate.month}월 ${_selectedDate.day}일', style: const TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.repeat),
-            tooltip: '반복 루틴 추가',
-            onPressed: _showAddRoutineDialog,
-          ),
-          IconButton(
-            icon: const Icon(Icons.folder),
-            tooltip: '카테고리 필터',
-            onPressed: _showCategoryFilterDialog,
-          ),
-          IconButton(
-            icon: const Icon(Icons.calendar_month),
-            tooltip: '날짜 변경',
-            onPressed: () => _selectDate(context),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.menu),
+            tooltip: '메뉴',
+            onSelected: (value) {
+              if (value == 'routine') {
+                _showAddRoutineDialog();
+              } else if (value == 'manage_routines') {
+                Navigator.push(context, MaterialPageRoute(builder: (context) => RoutineListScreen(
+                  routines: _routines,
+                  onDelete: (r) {
+                    setState(() {
+                      _routines.remove(r);
+                    });
+                    _saveData();
+                  }
+                )));
+              } else if (value == 'settings') {
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()));
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'routine',
+                child: Row(
+                  children: [
+                    Icon(Icons.repeat, size: 20, color: Colors.black54),
+                    SizedBox(width: 12),
+                    Text('반복 루틴 추가'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'manage_routines',
+                child: Row(
+                  children: [
+                    Icon(Icons.list_alt, size: 20, color: Colors.black54),
+                    SizedBox(width: 12),
+                    Text('루틴 관리'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'settings',
+                child: Row(
+                  children: [
+                    Icon(Icons.settings, size: 20, color: Colors.black54),
+                    SizedBox(width: 12),
+                    Text('설정'),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
-      body: displayTasks.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.event_note_rounded, size: 80, color: Colors.grey[300]),
-                  const SizedBox(height: 16),
-                  Text(
-                    _currentCategoryFilter == '전체' 
-                      ? '오늘은 일정이 없네요!\n휴식을 취하거나 새 일정을 추가해보세요.'
-                      : '[$_currentCategoryFilter] 카테고리가 비어있습니다.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey[500], fontSize: 16, height: 1.5),
-                  ),
-                ],
+      body: Column(
+        children: [
+          TableCalendar(
+            firstDay: DateTime(2020),
+            lastDay: DateTime(2030),
+            focusedDay: _focusedDate,
+            calendarFormat: _calendarFormat,
+            selectedDayPredicate: (day) => isSameDay(_selectedDate, day),
+            onDaySelected: (selectedDay, focusedDay) {
+              if (!isSameDay(_selectedDate, selectedDay)) {
+                setState(() {
+                  _selectedDate = selectedDay;
+                  _focusedDate = focusedDay;
+                });
+              }
+            },
+            onFormatChanged: (format) {
+              if (_calendarFormat != format) {
+                setState(() {
+                  _calendarFormat = format;
+                });
+              }
+            },
+            onPageChanged: (focusedDay) {
+              _focusedDate = focusedDay;
+            },
+            availableCalendarFormats: const {
+              CalendarFormat.month: '월',
+              CalendarFormat.week: '주',
+            },
+            calendarStyle: CalendarStyle(
+              selectedDecoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+                shape: BoxShape.circle,
               ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.only(top: 10, bottom: 80),
-              itemCount: displayTasks.length,
-              itemBuilder: (context, index) {
-                final task = displayTasks[index];
-                
-                // 시간 정보가 하나라도 있으면 표시할 문자열 생성
-                String timeString = "";
-                if (task.startTime.isNotEmpty && task.endTime.isNotEmpty) {
-                  timeString = "${task.startTime} - ${task.endTime}";
-                } else if (task.startTime.isNotEmpty) {
-                  timeString = "${task.startTime} 시작";
-                } else if (task.endTime.isNotEmpty) {
-                  timeString = "${task.endTime} 까지";
-                }
-
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  child: Material(
-                    elevation: 2,
-                    shadowColor: Colors.black12,
-                    borderRadius: BorderRadius.circular(16),
-                    color: Colors.white,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(16),
-                      onLongPress: () => _showTaskOptions(context, task, _selectedDate),
-                      child: Padding(
-                        padding: const EdgeInsets.all(4.0),
-                        child: CheckboxListTile(
-                          value: task.isDone,
-                          activeColor: Theme.of(context).colorScheme.primary, 
-                          checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)), 
-                          onChanged: (bool? newValue) {
-                            setState(() => task.isDone = newValue ?? false);
-                            _saveData(); 
-                          },
-                          title: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // 카테고리 & 시간 정보 표시
-                              Wrap(
-                                spacing: 8,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    margin: const EdgeInsets.only(bottom: 6),
-                                    decoration: BoxDecoration(
-                                      color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.5),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      task.category,
-                                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary),
-                                    ),
-                                  ),
-                                  if (timeString.isNotEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.only(bottom: 6),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(Icons.access_time, size: 12, color: Colors.grey[600]),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            timeString,
-                                            style: TextStyle(fontSize: 12, color: Colors.grey[700], fontWeight: FontWeight.w500),
-                                          ),
-                                        ],
-                                      ),
-                                    )
-                                ],
-                              ),
-                              Text(
-                                task.title,
-                                style: TextStyle(
-                                  decoration: task.isDone ? TextDecoration.lineThrough : TextDecoration.none,
-                                  color: task.isDone ? Colors.grey[400] : Colors.black87,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ],
-                          ),
-                          subtitle: task.memo.isNotEmpty
-                              ? Padding(
-                                  padding: const EdgeInsets.only(top: 4.0),
-                                  child: Text(
-                                    task.memo,
-                                    style: TextStyle(
-                                      decoration: task.isDone ? TextDecoration.lineThrough : TextDecoration.none,
-                                      color: Colors.grey[500],
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                )
-                              : null,
-                          controlAffinity: ListTileControlAffinity.leading,
-                          secondary: IconButton(
-                            icon: const Icon(Icons.more_horiz, color: Colors.grey),
-                            onPressed: () => _showTaskOptions(context, task, _selectedDate),
+              todayDecoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.4),
+                shape: BoxShape.circle,
+              ),
+            ),
+            headerStyle: const HeaderStyle(
+              titleCentered: true,
+              formatButtonVisible: true,
+              formatButtonShowsNext: false,
+            ),
+          ),
+          Expanded(
+            child: (todayRoutines.isEmpty && todayTasks.isEmpty)
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.event_note_rounded, size: 80, color: Colors.grey[300]),
+                        const SizedBox(height: 16),
+                        Text(
+                          '오늘은 일정이 없네요!\n휴식을 취하거나 새 일정을 추가해보세요.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey[500], fontSize: 16, height: 1.5),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView(
+                    padding: const EdgeInsets.only(top: 10, bottom: 80),
+                    children: [
+                      // Routines Section
+                      if (todayRoutines.isNotEmpty) ...[
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          child: Text(
+                            '루틴(반복적으로 할 일)',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary),
                           ),
                         ),
-                      ),
-                    ),
+                        ...todayRoutines.map((r) {
+                          bool isDone = _completedRoutines[dateKey]?.contains(r.id) ?? false;
+                          String timeStr = "";
+                          if (r.startTime.isNotEmpty && r.endTime.isNotEmpty) timeStr = "${r.startTime} ~ ${r.endTime}";
+                          else if (r.startTime.isNotEmpty) timeStr = r.startTime;
+
+                          return Card(
+                            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              side: BorderSide(color: Colors.grey[200]!, width: 1),
+                            ),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                              leading: Checkbox(
+                                value: isDone,
+                                shape: const CircleBorder(),
+                                activeColor: Theme.of(context).colorScheme.primary,
+                                onChanged: (value) {
+                                  setState(() {
+                                    if (value == true) {
+                                      _completedRoutines.putIfAbsent(dateKey, () => []).add(r.id);
+                                    } else {
+                                      _completedRoutines[dateKey]?.remove(r.id);
+                                    }
+                                  });
+                                  _saveData();
+                                },
+                              ),
+                              title: Text(
+                                r.title,
+                                style: TextStyle(
+                                  fontSize: r.memo.isEmpty ? 17.0 : 15.0,
+                                  decoration: isDone ? TextDecoration.lineThrough : null,
+                                  color: isDone ? Colors.grey[400] : fontColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.more_vert, color: Colors.grey),
+                                onPressed: () => _showTaskOptions(context, r, dateKey, 'routine'),
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (timeStr.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4.0),
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
+                                          const SizedBox(width: 4),
+                                          Text(timeStr, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                                        ],
+                                      ),
+                                    ),
+                                  if (r.memo.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4.0),
+                                      child: Text(r.memo, style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+                                    ),
+                                ],
+                              ),
+                              onLongPress: () => _showTaskOptions(context, r, dateKey, 'routine'),
+                            ),
+                          );
+                        }).toList(),
+                      ],
+
+                      // Todo Section
+                      if (todayTasks.isNotEmpty) ...[
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          child: Text(
+                            'Todo',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary),
+                          ),
+                        ),
+                        ..._categories.map((cat) {
+                          List<Task> catTasks = todayTasks.where((t) => t.category == cat).toList();
+                          if (catTasks.isEmpty) return const SizedBox.shrink();
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(left: 20, top: 8, bottom: 4),
+                                child: Text(cat, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[600], fontSize: 13)),
+                              ),
+                              ...catTasks.map((task) {
+                                String timeStr = "";
+                                if (task.startTime.isNotEmpty && task.endTime.isNotEmpty) timeStr = "${task.startTime} ~ ${task.endTime}";
+                                else if (task.startTime.isNotEmpty) timeStr = task.startTime;
+
+                                return Card(
+                                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    side: BorderSide(color: Colors.grey[200]!, width: 1),
+                                  ),
+                                  child: ListTile(
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                                    leading: Checkbox(
+                                      value: task.isDone,
+                                      shape: const CircleBorder(),
+                                      activeColor: Theme.of(context).colorScheme.primary,
+                                      onChanged: (value) {
+                                        setState(() => task.isDone = value!);
+                                        _saveData();
+                                      },
+                                    ),
+                                    title: Text(
+                                      task.title,
+                                      style: TextStyle(
+                                        fontSize: task.memo.isEmpty ? 17.0 : 15.0,
+                                        decoration: task.isDone ? TextDecoration.lineThrough : null,
+                                        color: task.isDone ? Colors.grey[400] : fontColor,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    trailing: IconButton(
+                                      icon: const Icon(Icons.more_vert, color: Colors.grey),
+                                      onPressed: () => _showTaskOptions(context, task, dateKey, 'task'),
+                                    ),
+                                    subtitle: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        if (timeStr.isNotEmpty)
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: 4.0),
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
+                                                const SizedBox(width: 4),
+                                                Text(timeStr, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                                              ],
+                                            ),
+                                          ),
+                                        if (task.memo.isNotEmpty)
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: 4.0),
+                                            child: Text(task.memo, style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+                                          ),
+                                      ],
+                                    ),
+                                    onLongPress: () => _showTaskOptions(context, task, dateKey, 'task'),
+                                  ),
+                                );
+                              }).toList(),
+                            ],
+                          );
+                        }).toList(),
+                      ],
+                    ],
                   ),
-                );
-              },
-            ),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddTaskDialog,
         icon: const Icon(Icons.add),
         label: const Text('할 일 추가'),
         elevation: 4,
       ),
+    );
+  }
+}
+
+class SettingsScreen extends StatelessWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final List<Color> colorOptions = [
+      const Color(0xFF6A9C89), 
+      const Color(0xFFE2F0CB), 
+      const Color(0xFFFFFBD4), 
+      const Color(0xFFFFE6EB), 
+      const Color(0xFFE0D8F7), 
+      const Color(0xFFD7E3FC), 
+      const Color(0xFFFFDAC1), 
+      Colors.blueAccent,
+      Colors.indigo,
+      Colors.purpleAccent,
+      Colors.pinkAccent,
+      Colors.orangeAccent,
+      Colors.brown,
+      Colors.teal,
+      Colors.blueGrey,
+    ];
+
+    final List<String> fontOptions = [
+      'Noto Sans KR',
+      'Nanum Pen Script',
+      'Jua',
+      'Dongle',
+      'Gowun Dodum',
+    ];
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('설정'),
+      ),
+      body: ListView(
+        children: [
+          const ListTile(
+            title: Text('글자 폰트 변경', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: ValueListenableBuilder<String>(
+              valueListenable: appFontFamily,
+              builder: (context, currentFont, child) {
+                return Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: fontOptions.map((fontName) {
+                    bool isSelected = currentFont == fontName;
+                    return ChoiceChip(
+                      label: Text(fontName),
+                      selected: isSelected,
+                      onSelected: (selected) async {
+                        if (selected) {
+                          appFontFamily.value = fontName;
+                          final prefs = await SharedPreferences.getInstance();
+                          await prefs.setString('themeFont', fontName);
+                        }
+                      },
+                    );
+                  }).toList(),
+                );
+              },
+            ),
+          ),
+          const Divider(height: 40),
+          const ListTile(
+            title: Text('테마 색상 변경', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: colorOptions.map((color) {
+                return GestureDetector(
+                  onTap: () async {
+                    appThemeColor.value = color;
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setInt('themeColor', color.value);
+                  },
+                  child: ValueListenableBuilder<Color>(
+                    valueListenable: appThemeColor,
+                    builder: (context, currentColor, child) {
+                      bool isSelected = currentColor.value == color.value;
+                      return Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                          border: isSelected ? Border.all(color: Colors.black, width: 3) : null,
+                        ),
+                        child: isSelected ? const Icon(Icons.check, color: Colors.white) : null,
+                      );
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class RoutineListScreen extends StatefulWidget {
+  final List<Routine> routines;
+  final Function(Routine) onDelete;
+
+  const RoutineListScreen({super.key, required this.routines, required this.onDelete});
+
+  @override
+  State<RoutineListScreen> createState() => _RoutineListScreenState();
+}
+
+class _RoutineListScreenState extends State<RoutineListScreen> {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('루틴 관리'),
+      ),
+      body: widget.routines.isEmpty 
+          ? const Center(child: Text('등록된 루틴이 없습니다.', style: TextStyle(color: Colors.black87)))
+          : ListView.builder(
+              itemCount: widget.routines.length,
+              itemBuilder: (context, index) {
+                final r = widget.routines[index];
+                String repeatStr = '';
+                if (r.repeatType == '매주') {
+                  List<String> days = ['월', '화', '수', '목', '금', '토', '일'];
+                  List<String> selected = r.repeatValue.split(',').map((e) => days[int.parse(e) - 1]).toList();
+                  repeatStr = '매주 ${selected.join(", ")}';
+                } else if (r.repeatType == '매월') {
+                  repeatStr = '매월 ${r.repeatValue}일';
+                } else if (r.repeatType == 'N일마다') {
+                  repeatStr = '${r.repeatValue}일 마다';
+                }
+                
+                return ListTile(
+                  title: Text(r.title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+                  subtitle: Text(repeatStr, style: const TextStyle(color: Colors.black54)),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('루틴 삭제', style: TextStyle(color: Colors.black87)),
+                          content: const Text('이 루틴을 삭제하시겠습니까?', style: TextStyle(color: Colors.black87)),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('취소')),
+                            FilledButton(
+                              onPressed: () {
+                                widget.onDelete(r);
+                                setState(() {});
+                                Navigator.pop(ctx);
+                              },
+                              child: const Text('삭제'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
     );
   }
 }
